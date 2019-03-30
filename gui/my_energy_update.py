@@ -34,12 +34,16 @@ def gen_syn_error(ite):
 
 plt.ion()
 
+# added this part so that it is initially scaled to that size and nthing more
 x = [0,100]
-y = [0,10]
+y = [-3,3]
 
 fig = plt.figure()
 ax = fig.add_subplot(111)
 l1, =  ax.plot(x, y, 'r-')
+
+x = [0]
+y = [0]
 
 for i in range(0,100):
     time.sleep(0.1)
