@@ -1,22 +1,44 @@
 #!/usr/bin/python3.5
+# This u(x,i) are what are in the network.
+# The v(x,i) is what we get after applying gou on the u(x,i)
+# v(x,i) are what are used in the update rule.
+import numpy as np
+import pickle
+import time
+from math import tanh
+u0 = 0.01
+delta_t = 0.0001
+termination_threshold = 0.1
+non_interactive = False
+    
+class params:
+    A = 500
+    B = 500
+    C = 200
+    D = 100
 
+
+def gou(u):
+    global u0
+    V = 0.5*(1 + tanh(u/u0))
+    return V
 
 # we are going to generate the co-ordinates of the given number of cities
 # and then return a distance matrix for the same
-
 def rand_city(count, x_max, y_max):
     # count is the number of cities
     # max_x and max_y are the maximum allowed ranges for the cities
     
-    import random as r
-    import numpy as np
-
     # this will store the list of cities
     cities = [None,None]
     dist = []
-    cities[0] = np.random.randint(x_max,size = count)
-    cities[1] = np.random.randint(y_max,size = count)
+    # cities[0] = np.random.random(x_max,size = count)
+    # cities[1] = np.random.random(y_max,size = count)
+
+    cities[0] = np.random.random_sample(size = count)
+    cities[1] = np.random.random_sample(size = count)
     cities = np.transpose(np.array(cities))
+    # now the cities.shape is (count, 2)
 
     # now we calculate the distance matrix
     from math import sqrt as sqrt
@@ -31,11 +53,24 @@ def rand_city(count, x_max, y_max):
 
     return cities, np.array(dist)
 
-def hopfield_tsp(cities, distances):
-    import numpy as np
+
+def energy_of(network, distances, cities):
+    # This function will return the Energy corresponding to the current
+    # cofiguration of the network using the distances betwwen the cities
+    # from the distances parameter
+    E = 0 # this is energy we return
+
+    A = params.A # for the rows
+    B = params.B # for the colums
+    C = params.C # for the sum of N 1s
+    D = params.D # for the actual route
 
     num_cities = len(cities)
-    network = np.random.rand(num_cities, num_cities)
+
+    vectorised_gou = np.vectorize(gou)
+    
+    network = vectorised_gou(network)
+    # now we go on adding terms to it
 
     # row constraint
     row_term = 0
@@ -50,6 +85,9 @@ def hopfield_tsp(cities, distances):
         row_on_row = row_on_row * mask
 
         row_term += np.sum(row_on_row)
+    
+    E += (A / 2.0) * (row_term)
+    # print("->", E)
 
 
     # column constraint
@@ -66,31 +104,257 @@ def hopfield_tsp(cities, distances):
 
         column_term += np.sum(col_on_col)
 
+    E += (B / 2.0) * (column_term)
+    # print("-->", E)
+
     # the n_cities term
-    n_cities_term = sum(network) - num_cities
+    n_cities_term = network.sum() - num_cities
     n_cities_term **= 2
-    
+    E += (C / 2.0 * n_cities_term)
+    # print("--->", E)
+
     # the distance constraint
     total_distance = 0
+    for x in range(num_cities):
+        for y in range(num_cities):
+            if y == x:
+                continue
+            for i in range(num_cities):
+                total_distance += ( distances[x][y] * network[x][i] * 
+                                (network[y][(i+1)%num_cities] + network[y][(i-1)%num_cities]) )
 
+    E += (D / 2.0) * total_distance
+    # print("---->", E)
+    return E
+
+
+def delta_uxi(network, distances, cities):
+    # returns a matrix of the same shape as the netwotk and it has the deltas
+    # to be add to the neurons.
+    
+    tou = 1
+    num_cities = len(cities)
+
+    A = params.A
+    B = params.B
+    C = params.C
+    D = params.D
+
+    vectorised_gou = np.vectorize(gou)
+    V = vectorised_gou(network)
+
+    delta_network = np.zeros((num_cities, num_cities))
+
+    delta_network = np.array(network)
+    delta_network = -delta_network / tou
+    for x in range(num_cities):
+        for i in range(num_cities):
+            # along the row
+            row_term = 0
+            for j in range(num_cities):
+                if i == j:
+                    continue
+                row_term += V[x][j]
+            delta_network[x][i] -= A * row_term
+
+            # along column
+            column_term = 0
+            for y in range(num_cities):
+                if y == x:
+                    continue
+                column_term += V[y][i]
+            delta_network[x][i] -= B * column_term
+
+            # total count term
+            # count_term = 0
+            # for X in range(num_cities):
+            #     for j in range(num_cities):
+            #         count_term += V[X][j]
+            count_term = np.sum(V)
+            
+            delta_network[x][i] -= C * (count_term - num_cities)
+
+            # distance term
+            distance_term = 0
+            for y in range(num_cities):
+                distance_term += distances[x][y] * (
+                    V[y][(i+1)%num_cities]+
+                    V[y][(i-1)%num_cities])
+            delta_network[x][i] -= D * distance_term
+    
+    return delta_network
+
+def hopfield_tsp(cities, distances, target_axes, iteration_count):
+    num_cities = len(cities)
+    network = (np.random.rand(num_cities, num_cities)-0.5)*2
+    # energy_line = target_axes.plot([0],[energy_of(network, distances, cities)])
+    energy_line = target_axes.plot([],[])[0]
+    xdata = []
+    ydata = []
+
+    threshold_function = lambda x : 1 if x > termination_threshold else 0
+    threshold_function = np.vectorize(threshold_function)
+
+    vec_gou = np.vectorize(gou)
+
+    def all_zero(a):
+        # Takes in an numpy.ndarray and returns true if all the elements are
+        for ii in a:
+            if 1 != ii:
+                return False
+        return True
+    
+    old_energy = energy_of(network, distances, cities)
+    true_iter = 0
+    while True:
+        for iteration in range(iteration_count): #*num_cities):
+            row_flag = False
+            column_flag = False
+            # print(network)
+            delta = delta_uxi(network, distances, cities)
+            network += (delta * delta_t)
+            energy = energy_of(network, distances, cities)
+            print ("Iteration", iteration, "np.sum:", np.sum(threshold_function(vec_gou(network))), "Energy:", np.round(energy,5), end="\r")
+
+            # Now we look for the termination condition
+            # The one suggest in the paper is to use the threshold value of 0.1
+            after_threshold = threshold_function(vec_gou(network))
+            if all_zero(np.sum(after_threshold, 0)):
+                # Along column all zero
+                print("Along column all zero but for 1")
+                column_flag = True
+            
+            if all_zero(np.sum(after_threshold, 1)):
+                # Along row all zero
+                print("Along row all zero but for 1")
+                row_flag = True
+            
+            if column_flag and row_flag:
+                # This is the success condition
+                total_distance = 0
+                for x in range(num_cities):
+                    for y in range(num_cities):
+                        if y == x:
+                            continue
+                        for i in range(num_cities):
+                            total_distance += ( distances[x][y] * after_threshold[x][i] * 
+                                            (after_threshold[y][(i+1)%num_cities] + after_threshold[y][(i-1)%num_cities]) )
+                
+                print("success total distance =", total_distance)
+                return (True,total_distance,after_threshold)
+
+            if abs(old_energy - energy) < 10**-35:
+                # Abrupt end
+                print("\ntoo less")
+                # break
+                print("\n", np.around(vec_gou(network), decimals=2))
+                return (False,None)
+
+            old_energy = energy
+
+
+            # This is for the graph being generated
+            xdata.append(true_iter+iteration)
+            ydata.append(energy)
+            # energy_line.set_xdata(list(energy_line.get_xdata)+[iteration])
+            # energy_line.set_ydata(list(energy_line.get_ydata)+[energy])
+            # we get the energy then the deltas to be added
+            # we make the changes and then iterate.
+            # the network has the u(x,i)
+        true_iter = len(ydata)
+
+        # Now we set the x and y lim of the plot
+        energy_line.set_xdata(xdata)
+        energy_line.set_ydata(ydata)
+        target_axes.set_xlim(left = 0, right = true_iter)
+        target_axes.set_ylim(bottom=min(energy_line.get_ydata()) , top=max(energy_line.get_ydata()))
+        print("\n", np.around(vec_gou(network), decimals=2))
+        
+        if not non_interactive:
+            ch = input()
+            if ch != "y":
+                break
+        else:
+            time.sleep(1)
+    
+def get_cmdline_args():
+    # returns a parser required to parse the command line arguments
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-f", "--file", type=str)
+    parser.add_argument("-n", "--ncity", type=int, default=10)
+    parser.add_argument("--delta_t", type=float, default=0.00001, help="This is the analogue of the step size/learning rate")
+    parser.add_argument("--u0", type=float, default=0.01, help="This is the gain value. It decides how drastic the activation function is. A lower value implies a more drastic curve.")
+    parser.add_argument("--itercnt", type=int, default=100, help="This is the number of iterations that is run before we ask if we wish to continue or not.")
+    parser.add_argument("--termthresh", type=float, default=0.1, help="This is the threshold value used for seeing if that city has to be used for that location in the tour or not")
+    parser.add_argument("--nonint", action='store_true', help="Set this flag so that continuously keep runnning till the termination is met")
+    return parser.parse_args()
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
-    N_CITY = 10
-    MAX_X = 10
-    MAX_Y = 10
-    city, dist = rand_city(N_CITY, MAX_X, MAX_Y)
+    import _thread
+    
+    args = get_cmdline_args()
+
+    N_CITY = args.ncity
+    MAX_X = 20
+    MAX_Y = 20
+
+    delta_t = args.delta_t
+    u0 = args.u0
+    iteration_count = args.itercnt
+    termination_threshold = args.termthresh
+    non_interactive = args.nonint
+
+    # if we have passed it a file name then we better use that
+    city, dist = None, None
+    if args.file:
+        city = pickle.load(open(args.file,"rb"))
+        dist = []
+        from math import sqrt as sqrt
+        def dist_fx(a,b):
+            return sqrt((a[0]-b[0])**2 + (a[1]-b[1])**2)
+
+        for i in range(len(city)):
+            dist.append([])
+            for j in range(len(city)):
+                dist[i].append([])
+                dist[i][j] = dist_fx(city[i],city[j])
+    else:
+        city, dist = rand_city(N_CITY, MAX_X, MAX_Y)
     print(city)
     for row in dist:
         print (row)
 
     #_thread.start_new_thread(plot_cities, (city,))
     plt.ion()
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
-    ax.scatter(city[:2,0], city[:2,1])
+    cities_plot = plt.figure()
+    ax = cities_plot.add_subplot(111)
     ax.scatter(city[:,0], city[:,1])
 
-    hopfield_tsp(city)
+    # This for the energy function:
+    energy_plot = plt.figure()
+    energy_axes = energy_plot.add_subplot(111)
+    energy_axes.set_autoscale_on(True)
 
-    input()
+
+    # _thread.start_new_thread(hopfield_tsp,(city, dist))
+    # import threading
+    # hnnt = threading.Thread(target=hopfield_tsp, args=(city, dist))
+    # hnnt.start()
+
+    ret = hopfield_tsp(city,dist,energy_axes, iteration_count)
+    if ret[0]:
+        import matplotlib.lines as lines
+        edge_line_gen = lambda x,y : lines.Line2D([city[x][0], city[y][0]], 
+                                        [city[x][1], city[y][1]],
+                                        linewidth=1,
+                                        linestyle=':')
+        tsp = ret[2]
+        edge_lines = [edge_line_gen(list(tsp[:,i]).index(1), list(tsp[:,(i+1)%len(city)]).index(1)) for i in range(len(city))]
+        
+        for line in edge_lines:
+            ax.add_line(line)
+        input()
+    # hnnt.join()
+    # input()
