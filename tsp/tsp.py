@@ -2,20 +2,23 @@
 # This u(x,i) are what are in the network.
 # The v(x,i) is what we get after applying gou on the u(x,i)
 # v(x,i) are what are used in the update rule.
+
 import numpy as np
 import pickle
 import time
 from math import tanh
+
 u0 = 0.01
 delta_t = 0.0001
 termination_threshold = 0.1
 non_interactive = False
+no_plot = False
     
 class params:
     A = 500
     B = 500
     C = 200
-    D = 100
+    D = 250
 
 
 def gou(u):
@@ -188,7 +191,8 @@ def hopfield_tsp(cities, distances, target_axes, iteration_count):
     num_cities = len(cities)
     network = (np.random.rand(num_cities, num_cities)-0.5)*2
     # energy_line = target_axes.plot([0],[energy_of(network, distances, cities)])
-    energy_line = target_axes.plot([],[])[0]
+    if not no_plot:
+        energy_line = target_axes.plot([],[])[0]
     xdata = []
     ydata = []
 
@@ -264,11 +268,12 @@ def hopfield_tsp(cities, distances, target_axes, iteration_count):
         true_iter = len(ydata)
 
         # Now we set the x and y lim of the plot
-        energy_line.set_xdata(xdata)
-        energy_line.set_ydata(ydata)
-        target_axes.set_xlim(left = 0, right = true_iter)
-        target_axes.set_ylim(bottom=min(energy_line.get_ydata()) , top=max(energy_line.get_ydata()))
-        print("\n", np.around(vec_gou(network), decimals=2))
+        if not no_plot:
+            energy_line.set_xdata(xdata)
+            energy_line.set_ydata(ydata)
+            target_axes.set_xlim(left = 0, right = true_iter)
+            target_axes.set_ylim(bottom=min(energy_line.get_ydata()) , top=max(energy_line.get_ydata()))
+            print("\n", np.around(vec_gou(network), decimals=2))
         
         if not non_interactive:
             ch = input()
@@ -288,6 +293,8 @@ def get_cmdline_args():
     parser.add_argument("--itercnt", type=int, default=100, help="This is the number of iterations that is run before we ask if we wish to continue or not.")
     parser.add_argument("--termthresh", type=float, default=0.1, help="This is the threshold value used for seeing if that city has to be used for that location in the tour or not")
     parser.add_argument("--nonint", action='store_true', help="Set this flag so that continuously keep runnning till the termination is met")
+    parser.add_argument("--noplot", action="store_true", help="Set this flag so that we don't generate any plots at the end of execution.")
+    parser.add_argument("--retry", type=int, default=0, help="The number of times we need to retry the method. So each time we use a different random starting point so that we might converge on error. The default is 0 retries => 1 pass")
     return parser.parse_args()
 
 if __name__ == "__main__":
@@ -305,6 +312,9 @@ if __name__ == "__main__":
     iteration_count = args.itercnt
     termination_threshold = args.termthresh
     non_interactive = args.nonint
+    no_plot = args.noplot
+
+    retries_left = args.retry
 
     # if we have passed it a file name then we better use that
     city, dist = None, None
@@ -327,15 +337,20 @@ if __name__ == "__main__":
         print (row)
 
     #_thread.start_new_thread(plot_cities, (city,))
-    plt.ion()
-    cities_plot = plt.figure()
-    ax = cities_plot.add_subplot(111)
-    ax.scatter(city[:,0], city[:,1])
+    
+    ax = None
+    energy_axes = None
+    
+    if not no_plot:
+        plt.ion()
+        cities_plot = plt.figure()
+        ax = cities_plot.add_subplot(111)
+        ax.scatter(city[:,0], city[:,1])
 
-    # This for the energy function:
-    energy_plot = plt.figure()
-    energy_axes = energy_plot.add_subplot(111)
-    energy_axes.set_autoscale_on(True)
+        # This for the energy function:
+        energy_plot = plt.figure()
+        energy_axes = energy_plot.add_subplot(111)
+        energy_axes.set_autoscale_on(True)
 
 
     # _thread.start_new_thread(hopfield_tsp,(city, dist))
@@ -343,18 +358,24 @@ if __name__ == "__main__":
     # hnnt = threading.Thread(target=hopfield_tsp, args=(city, dist))
     # hnnt.start()
 
-    ret = hopfield_tsp(city,dist,energy_axes, iteration_count)
-    if ret[0]:
-        import matplotlib.lines as lines
-        edge_line_gen = lambda x,y : lines.Line2D([city[x][0], city[y][0]], 
-                                        [city[x][1], city[y][1]],
-                                        linewidth=1,
-                                        linestyle=':')
-        tsp = ret[2]
-        edge_lines = [edge_line_gen(list(tsp[:,i]).index(1), list(tsp[:,(i+1)%len(city)]).index(1)) for i in range(len(city))]
-        
-        for line in edge_lines:
-            ax.add_line(line)
-        input()
-    # hnnt.join()
-    # input()
+    while retries_left >= 0:
+        retries_left -= 1
+        ret = hopfield_tsp(city,dist,energy_axes, iteration_count)
+        if ret[0]:
+            # TODO: we need to add the savin of the results part and also the initial network config that lead to this ... one way is to add things to a 'tracer' sort of thing if the --tracer switch is set
+	    	# This implies a route was found.
+            if not no_plot:
+                import matplotlib.lines as lines
+                edge_line_gen = lambda x,y : lines.Line2D([city[x][0], city[y][0]], 
+                                                [city[x][1], city[y][1]],
+                                                linewidth=1,
+                                                linestyle=':')
+                tsp = ret[2]
+                edge_lines = [edge_line_gen(list(tsp[:,i]).index(1), list(tsp[:,(i+1)%len(city)]).index(1)) for i in range(len(city))]
+                
+                for line in edge_lines:
+                    ax.add_line(line)
+                input()
+            break;
+        # hnnt.join()
+        # input()

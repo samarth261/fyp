@@ -1,3 +1,37 @@
 This folder corresponds to the tsp problem of the project
 
 
+usage: tsp.py [-h] [-f FILE] [-n NCITY] [--delta_t DELTA_T] [--u0 U0]
+              [--itercnt ITERCNT] [--termthresh TERMTHRESH] [--nonint]
+              [--noplot] [--retry RETRY]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -f FILE, --file FILE
+  -n NCITY, --ncity NCITY
+  --delta_t DELTA_T     This is the analogue of the step size/learning rate
+  --u0 U0               This is the gain value. It decides how drastic the
+                        activation function is. A lower value implies a more
+                        drastic curve.
+  --itercnt ITERCNT     This is the number of iterations that is run before we
+                        ask if we wish to continue or not.
+  --termthresh TERMTHRESH
+                        This is the threshold value used for seeing if that
+                        city has to be used for that location in the tour or
+                        not
+  --nonint              Set this flag so that continuously keep runnning till
+                        the termination is met
+  --noplot              Set this flag so that we don't generate any plots at
+                        the end of execution.
+  --retry RETRY         The number of times we need to retry the method. So
+                        each time we use a different random starting point so
+                        that we might converge on error. The default is 0
+                        retries => 1 pass
+
+
+
+examples:
+
+python3.5 tsp.py --delta_t 0.000001 --u0 0.01 --itercnt 2000 --termthresh 0.1 --retry 15 --noplot --nonint
+
+
