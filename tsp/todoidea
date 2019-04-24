@@ -1,0 +1,5 @@
+1. save the number of times it failed also.
+2. store the best solution
+3. store till what iteration did we go before failing the op
+4. make tsp into a class
+5. make the plotting thing much better

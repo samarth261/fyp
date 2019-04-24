@@ -48,10 +48,19 @@ def my_export(cities):
     fname = new_fname(len(cities))
     pickle.dump(cities, open(fname,"wb"))
 
+
+def get_cmdline_args():
+    # returns a parser required to parse the command line arguments
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-n", "--ncity", type=int, default=10, help="The number of cities in the graph")
+
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
     import _thread
-    N_CITY = 10
+
+    args = get_cmline_args()
+    N_CITY = args.ncity
     plt.ion()
     cities_plot = plt.figure()
     ax = cities_plot.add_subplot(111)

@@ -7,12 +7,18 @@ import numpy as np
 import pickle
 import time
 from math import tanh
+import copy
+import tracer # imports ./tracer.py
 
 u0 = 0.01
 delta_t = 0.0001
 termination_threshold = 0.1
 non_interactive = False
 no_plot = False
+
+should_stop_iteration_count = False
+
+trc = None
     
 class params:
     A = 500
@@ -188,8 +194,11 @@ def delta_uxi(network, distances, cities):
     return delta_network
 
 def hopfield_tsp(cities, distances, target_axes, iteration_count):
+    success_flag = False
     num_cities = len(cities)
     network = (np.random.rand(num_cities, num_cities)-0.5)*2
+
+    cached_initial_network = copy.copy(network)
     # energy_line = target_axes.plot([0],[energy_of(network, distances, cities)])
     if not no_plot:
         energy_line = target_axes.plot([],[])[0]
@@ -245,8 +254,10 @@ def hopfield_tsp(cities, distances, target_axes, iteration_count):
                                             (after_threshold[y][(i+1)%num_cities] + after_threshold[y][(i-1)%num_cities]) )
                 
                 print("success total distance =", total_distance)
-                return (True,total_distance,after_threshold)
-
+                success_flag = True
+                trc.add_solution(after_threshold)
+                break
+                
             if abs(old_energy - energy) < 10**-35:
                 # Abrupt end
                 print("\ntoo less")
@@ -274,6 +285,11 @@ def hopfield_tsp(cities, distances, target_axes, iteration_count):
             target_axes.set_xlim(left = 0, right = true_iter)
             target_axes.set_ylim(bottom=min(energy_line.get_ydata()) , top=max(energy_line.get_ydata()))
             print("\n", np.around(vec_gou(network), decimals=2))
+
+        if success_flag:
+            trc.set_true_itercnt_and_init_network(true_iter, cached_initial_network)
+            return (True,total_distance,after_threshold)
+
         
         if not non_interactive:
             ch = input()
@@ -281,6 +297,10 @@ def hopfield_tsp(cities, distances, target_axes, iteration_count):
                 break
         else:
             time.sleep(1)
+        
+    if stop_at_iteration_count:
+        print("Not retrying")
+        return (False, None)
     
 def get_cmdline_args():
     # returns a parser required to parse the command line arguments
@@ -295,6 +315,11 @@ def get_cmdline_args():
     parser.add_argument("--nonint", action='store_true', help="Set this flag so that continuously keep runnning till the termination is met")
     parser.add_argument("--noplot", action="store_true", help="Set this flag so that we don't generate any plots at the end of execution.")
     parser.add_argument("--retry", type=int, default=0, help="The number of times we need to retry the method. So each time we use a different random starting point so that we might converge on error. The default is 0 retries => 1 pass")
+    parser.add_argument("--A", type=float, default=500, help="The row penalty")
+    parser.add_argument("--B", type=float, default=500, help="The col penalty")
+    parser.add_argument("--C", type=float, default=200, help="The global inhibition")
+    parser.add_argument("--D", type=float, default=500, help="The distance penalty")
+    parser.add_argument("--stopatitercnt", action='store_true', help="Setting this flag will not run the simulation beyond the value specified by itercnt")
     return parser.parse_args()
 
 if __name__ == "__main__":
@@ -314,7 +339,14 @@ if __name__ == "__main__":
     non_interactive = args.nonint
     no_plot = args.noplot
 
+    params.A = args.A
+    params.B = args.B
+    params.C = args.C
+    params.D = args.D
+
     retries_left = args.retry
+    
+    should_stop_iteration_count = args.stopatitercnt
 
     # if we have passed it a file name then we better use that
     city, dist = None, None
@@ -336,6 +368,8 @@ if __name__ == "__main__":
     for row in dist:
         print (row)
 
+    trc = tracer.TSPTracer(args.ncity, args.file, delta_t, u0, termination_threshold, params.A, params.B, params.C, params.D, city, dist)
+    
     #_thread.start_new_thread(plot_cities, (city,))
     
     ax = None
@@ -362,8 +396,9 @@ if __name__ == "__main__":
         retries_left -= 1
         ret = hopfield_tsp(city,dist,energy_axes, iteration_count)
         if ret[0]:
-            # TODO: we need to add the savin of the results part and also the initial network config that lead to this ... one way is to add things to a 'tracer' sort of thing if the --tracer switch is set
-	    	# This implies a route was found.
+	    # This implies a route was found.
+            # We write the tracer contents
+            trc.save_to_stats_file()
             if not no_plot:
                 import matplotlib.lines as lines
                 edge_line_gen = lambda x,y : lines.Line2D([city[x][0], city[y][0]], 
