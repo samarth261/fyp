@@ -1,9 +1,10 @@
-This folder corresponds to the tsp problem of the project
+This folder corresponds to the tsp kernel of the project
 
 
 usage: tsp.py [-h] [-f FILE] [-n NCITY] [--delta_t DELTA_T] [--u0 U0]
               [--itercnt ITERCNT] [--termthresh TERMTHRESH] [--nonint]
-              [--noplot] [--retry RETRY]
+              [--noplot] [--retry RETRY] [--A A] [--B B] [--C C] [--D D]
+              [--stopatitercnt]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -27,8 +28,12 @@ optional arguments:
                         each time we use a different random starting point so
                         that we might converge on error. The default is 0
                         retries => 1 pass
-
-
+  --A A                 The row penalty
+  --B B                 The col penalty
+  --C C                 The global inhibition
+  --D D                 The distance penalty
+  --stopatitercnt       Setting this flag will not run the simulation beyond
+                        the value specified by itercnt
 
 examples:
 

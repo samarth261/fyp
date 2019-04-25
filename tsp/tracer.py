@@ -3,7 +3,7 @@
 # This file defines a way where we can save some of the states into an output file while generating the results for the tsp
 
 # COLS:
-# unique_id(time), pickle_file_name, city_file_name, n, delta_t, u0, termthresh, A, B, C, D, soln_dist
+# unique_id(time), pickle_file_name, city_file_name,status(pass/fail), n, delta_t, u0, termthresh, A, B, C, D, soln_dist, number of retries
 
 STAT_FILE_NAME = "stats.csv"
 
@@ -29,6 +29,10 @@ class TSPTracer:
 
         self.true_iter = None
         self.init_net = None
+
+        self.number_of_retries = None
+        self.status = None # pass or fail
+
         self.unique_id = uuid.uuid4()
         self.pickle_file_name = "tracers/" + str(self.unique_id) # Generating a random file name
         self.city_file = None
@@ -68,11 +72,20 @@ class TSPTracer:
         self.true_iter = true_iter
         self.init_net = init_net
 
+    def set_number_of_retries(self, retry_cnt):
+        # print("\n",retry_cnt)
+        # input()
+        self.number_of_retries = retry_cnt
+
+    def set_status(self, pass_fail):
+        self.status = pass_fail
+
     def save_to_stats_file(self):
         # First choose the appropriate stats file, also we pickle this entire object and store it
         stat_str = ",".join(map(str, [str(time.time()),
                                       self.pickle_file_name,
                                       self.city_file,
+                                      self.status,
                                       self.n,
                                       self.delta_t,
                                       self.u0,
@@ -82,7 +95,8 @@ class TSPTracer:
                                       self.C,
                                       self.D,
                                       self.true_iter,
-                                      self.soln_dist]))
+                                      self.soln_dist,
+                                      self.number_of_retries]))
         stats = open(STAT_FILE_NAME, "a")
         stats.write(stat_str+"\n")
         stats.close()

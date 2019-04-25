@@ -16,7 +16,7 @@ termination_threshold = 0.1
 non_interactive = False
 no_plot = False
 
-should_stop_iteration_count = False
+stop_at_iteration_count = False
 
 trc = None
     
@@ -234,12 +234,12 @@ def hopfield_tsp(cities, distances, target_axes, iteration_count):
             after_threshold = threshold_function(vec_gou(network))
             if all_zero(np.sum(after_threshold, 0)):
                 # Along column all zero
-                print("Along column all zero but for 1")
+                # print("Along column all zero but for 1")
                 column_flag = True
             
             if all_zero(np.sum(after_threshold, 1)):
                 # Along row all zero
-                print("Along row all zero but for 1")
+                # print("Along row all zero but for 1")
                 row_flag = True
             
             if column_flag and row_flag:
@@ -262,7 +262,7 @@ def hopfield_tsp(cities, distances, target_axes, iteration_count):
                 # Abrupt end
                 print("\ntoo less")
                 # break
-                print("\n", np.around(vec_gou(network), decimals=2))
+                # print("\n", np.around(vec_gou(network), decimals=2))
                 return (False,None)
 
             old_energy = energy
@@ -298,9 +298,9 @@ def hopfield_tsp(cities, distances, target_axes, iteration_count):
         else:
             time.sleep(1)
         
-    if stop_at_iteration_count:
-        print("Not retrying")
-        return (False, None)
+        if stop_at_iteration_count:
+            print("Not retrying")
+            return (False, None)
     
 def get_cmdline_args():
     # returns a parser required to parse the command line arguments
@@ -346,7 +346,7 @@ if __name__ == "__main__":
 
     retries_left = args.retry
     
-    should_stop_iteration_count = args.stopatitercnt
+    stop_at_iteration_count = args.stopatitercnt
 
     # if we have passed it a file name then we better use that
     city, dist = None, None
@@ -365,8 +365,8 @@ if __name__ == "__main__":
     else:
         city, dist = rand_city(N_CITY, MAX_X, MAX_Y)
     print(city)
-    for row in dist:
-        print (row)
+    # for row in dist:
+    #    print (row)
 
     trc = tracer.TSPTracer(args.ncity, args.file, delta_t, u0, termination_threshold, params.A, params.B, params.C, params.D, city, dist)
     
@@ -398,6 +398,8 @@ if __name__ == "__main__":
         if ret[0]:
 	    # This implies a route was found.
             # We write the tracer contents
+            trc.set_number_of_retries(args.retry - retries_left - 1)
+            trc.set_status("pass")
             trc.save_to_stats_file()
             if not no_plot:
                 import matplotlib.lines as lines
@@ -411,6 +413,10 @@ if __name__ == "__main__":
                 for line in edge_lines:
                     ax.add_line(line)
                 input()
-            break;
+            exit(0);
+
+    trc.set_status("fail")
+    trc.set_number_of_retries(args.retry)
+    trc.save_to_stats_file()
         # hnnt.join()
         # input()
